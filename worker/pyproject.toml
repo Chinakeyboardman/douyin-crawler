@@ -17,4 +17,9 @@ douyin-cli = "cli:main"
 [tool.uv]
 dev-dependencies = [
     "flower>=2.0.0",
+    "pytest>=8.4.2",
 ]
+
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true

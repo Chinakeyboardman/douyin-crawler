@@ -374,16 +374,19 @@ function parseChineseNumber(text) {
   if (!text) return 0;
 
   const cleanText = text.trim();
+  if (!cleanText) return 0;
 
   // Handle "万" (10,000)
   if (cleanText.includes('万')) {
     const num = parseFloat(cleanText.replace('万', ''));
+    if (isNaN(num)) return 0;
     return Math.round(num * 10000);
   }
 
   // Handle "亿" (100,000,000)
   if (cleanText.includes('亿')) {
     const num = parseFloat(cleanText.replace('亿', ''));
+    if (isNaN(num)) return 0;
     return Math.round(num * 100000000);
   }
 

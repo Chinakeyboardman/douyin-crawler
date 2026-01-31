@@ -98,7 +98,8 @@ const SQL = {
       error_message TEXT,
       started_at TIMESTAMP,
       completed_at TIMESTAMP,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(video_id, step_name)
     );
     COMMENT ON COLUMN video_task_steps.step_name IS 'Step: download, submit, get_summary';
     COMMENT ON COLUMN video_task_steps.status IS 'Status: pending, processing, completed, failed';

@@ -16,6 +16,7 @@ def get_videos_without_summary(limit=20):
     Returns videos where:
     - No task exists, OR
     - Task exists but not completed
+    Uses FOR UPDATE SKIP LOCKED to prevent race conditions.
     """
     conn = get_connection()
     try:
@@ -29,6 +30,7 @@ def get_videos_without_summary(limit=20):
                    OR (t.status != 'completed' AND t.status != 'processing')
                 ORDER BY v.created_at ASC
                 LIMIT %s
+                FOR UPDATE OF v SKIP LOCKED
             """, (limit,))
             return cur.fetchall()
     finally:
@@ -94,11 +96,14 @@ def start_step(video_id, step_name):
                 WHERE video_id = %s
             """, (step_name, video_id))
 
-            # Insert step record
+            # Insert or update step record
             cur.execute("""
                 INSERT INTO video_task_steps (video_id, step_name, status, started_at)
                 VALUES (%s, %s, 'processing', CURRENT_TIMESTAMP)
-                ON CONFLICT DO NOTHING
+                ON CONFLICT (video_id, step_name) DO UPDATE SET
+                    status = 'processing',
+                    started_at = CURRENT_TIMESTAMP,
+                    error_message = NULL
             """, (video_id, step_name))
 
             conn.commit()
@@ -149,14 +154,14 @@ def reset_stale_tasks(hours=24):
                 UPDATE video_tasks
                 SET status = 'pending', updated_at = CURRENT_TIMESTAMP
                 WHERE status = 'processing'
-                AND updated_at < NOW() - INTERVAL '%s hours'
+                AND updated_at < NOW() - INTERVAL '1 hour' * %s
             """, (hours,))
 
             cur.execute("""
                 UPDATE video_task_steps
                 SET status = 'failed', error_message = 'Timeout - reset by scheduler'
                 WHERE status = 'processing'
-                AND started_at < NOW() - INTERVAL '%s hours'
+                AND started_at < NOW() - INTERVAL '1 hour' * %s
             """, (hours,))
 
             conn.commit()

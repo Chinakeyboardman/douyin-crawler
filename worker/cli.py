@@ -71,7 +71,8 @@ def show_status():
             print("-" * 60)
             for step, status, count in step_stats:
                 print(f"  {step:15} | {status:12} | {count}")
-
+    except Exception as e:
+        print(f"\n⚠️  Error fetching statistics: {e}")
     finally:
         conn.close()
 
