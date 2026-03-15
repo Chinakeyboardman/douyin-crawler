@@ -32,6 +32,7 @@ const CONFIG = {
 // SQL statements - all idempotent (IF NOT EXISTS / OR REPLACE)
 const SQL = {
   dropTables: `
+    DROP TABLE IF EXISTS douyin_video_summaries CASCADE;
     DROP TABLE IF EXISTS douyin_comments CASCADE;
     DROP TABLE IF EXISTS douyin_videos CASCADE;
     DROP TABLE IF EXISTS video_task_steps CASCADE;
@@ -54,6 +55,7 @@ const SQL = {
       shares_display VARCHAR(32),
       share_link TEXT,
       short_link TEXT,
+      local_file_path TEXT,
       raw_data JSONB,
       scraped_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -88,6 +90,21 @@ const SQL = {
     COMMENT ON COLUMN video_tasks.status IS 'Status: pending, processing, completed, failed';
   `,
 
+  createVideoSummariesTable: `
+    CREATE TABLE IF NOT EXISTS douyin_video_summaries (
+      id SERIAL PRIMARY KEY,
+      video_id VARCHAR(64) NOT NULL REFERENCES douyin_videos(video_id) ON DELETE CASCADE,
+      douyin_url TEXT NOT NULL,
+      webgemini_job_id VARCHAR(64),
+      webgemini_result TEXT,
+      status VARCHAR(32) NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(video_id)
+    );
+    COMMENT ON COLUMN douyin_video_summaries.status IS 'pending, processing, completed, failed';
+  `,
+
   createVideoTaskStepsTable: `
     CREATE TABLE IF NOT EXISTS video_task_steps (
       id SERIAL PRIMARY KEY,
@@ -119,6 +136,8 @@ const SQL = {
     CREATE INDEX IF NOT EXISTS idx_video_task_steps_video_id ON video_task_steps(video_id);
     CREATE INDEX IF NOT EXISTS idx_video_task_steps_step_name ON video_task_steps(step_name);
     CREATE INDEX IF NOT EXISTS idx_video_task_steps_status ON video_task_steps(status);
+    CREATE INDEX IF NOT EXISTS idx_douyin_video_summaries_video_id ON douyin_video_summaries(video_id);
+    CREATE INDEX IF NOT EXISTS idx_douyin_video_summaries_status ON douyin_video_summaries(status);
   `,
 
   createTriggerFunction: `
@@ -207,6 +226,7 @@ async function initTables(dropFirst = false) {
     await client.query(SQL.createCommentsTable);
     await client.query(SQL.createVideoTasksTable);
     await client.query(SQL.createVideoTaskStepsTable);
+    await client.query(SQL.createVideoSummariesTable);
     console.log('✅ Tables ready');
 
     // Create indexes (IF NOT EXISTS)

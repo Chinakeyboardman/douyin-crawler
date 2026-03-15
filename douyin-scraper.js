@@ -27,12 +27,13 @@ const { Pool } = require('pg');
 // Configuration
 const CONFIG = {
   DOUYIN_URL: 'https://www.douyin.com/?recommend=1',
-  USER_DATA_DIR: process.env.BROWSER_USER_DATA_DIR || path.join(os.tmpdir(), 'douyin-scraper-user-data'),
+  USER_DATA_DIR: process.env.BROWSER_USER_DATA_DIR || path.join(__dirname, 'browser-profile'),
   OUTPUT_DIR: path.join(process.cwd(), 'output'),
   SAVE_TO_FILE: process.env.SAVE_TO_FILE === 'true', // Default: false (database only)
   WAIT_TIMEOUT: 5000,
+  ACTIVE_VIDEO_TIMEOUT: 25000,
   MAX_COMMENTS: 10,
-  MIN_COMMENTS_THRESHOLD: 5000, // Only process videos with >= this many comments
+  MIN_COMMENTS_THRESHOLD: 3000,
   // Human-like behavior settings
   HUMAN_DELAY: {
     MIN_WAIT: 800,      // Minimum wait time in ms
@@ -44,12 +45,12 @@ const CONFIG = {
     TYPE_MIN: 30,       // Min delay between keystrokes
     TYPE_MAX: 120,      // Max delay between keystrokes
   },
-  // PostgreSQL configuration
+  // PostgreSQL configuration (PGUSER defaults to current user on macOS Homebrew)
   POSTGRES: {
     host: process.env.PGHOST || 'localhost',
     port: parseInt(process.env.PGPORT || '5432', 10),
     database: process.env.PGDATABASE || 'douyin',
-    user: process.env.PGUSER || 'postgres',
+    user: process.env.PGUSER || process.env.USER || 'postgres',
     password: process.env.PGPASSWORD || 'postgres',
   },
 };
@@ -543,78 +544,6 @@ async function extractComments(page, maxComments = CONFIG.MAX_COMMENTS) {
 }
 
 /**
- * Resolve short URL to get the true video link
- */
-async function resolveShortLink(page, shortUrl) {
-  if (!shortUrl) return null;
-
-  try {
-    // If it's already a full douyin.com/video URL, extract video ID
-    const videoIdMatch = shortUrl.match(/douyin\.com\/video\/(\d+)/);
-    if (videoIdMatch) {
-      return {
-        shortLink: shortUrl,
-        videoId: videoIdMatch[1],
-        fullLink: `https://www.douyin.com/video/${videoIdMatch[1]}`,
-      };
-    }
-
-    // If it's a v.douyin.com short link, we need to follow the redirect
-    if (shortUrl.includes('v.douyin.com')) {
-      // Open the short link in a new tab to get the redirect
-      const newPage = await page.context().newPage();
-
-      try {
-        // Navigate and wait for redirect
-        await newPage.goto(shortUrl, {
-          waitUntil: 'domcontentloaded',
-          timeout: 15000,
-        });
-
-        // Wait a bit for any JS redirects
-        await humanWait(1000, 2000);
-
-        // Get the final URL
-        const finalUrl = newPage.url();
-
-        // Extract video ID from final URL
-        const finalVideoIdMatch = finalUrl.match(/video\/(\d+)/);
-        const videoId = finalVideoIdMatch ? finalVideoIdMatch[1] : null;
-
-        await newPage.close();
-
-        return {
-          shortLink: shortUrl,
-          videoId,
-          fullLink: videoId ? `https://www.douyin.com/video/${videoId}` : finalUrl,
-        };
-      } catch (err) {
-        await newPage.close().catch(() => {});
-        console.log(`    ⚠️ Could not resolve short link: ${err.message}`);
-        return {
-          shortLink: shortUrl,
-          videoId: null,
-          fullLink: shortUrl,
-        };
-      }
-    }
-
-    return {
-      shortLink: shortUrl,
-      videoId: null,
-      fullLink: shortUrl,
-    };
-  } catch (error) {
-    console.log(`    ⚠️ Error resolving link: ${error.message}`);
-    return {
-      shortLink: shortUrl,
-      videoId: null,
-      fullLink: shortUrl,
-    };
-  }
-}
-
-/**
  * Get share link by clicking copy button
  */
 async function getShareLink(page) {
@@ -701,7 +630,12 @@ async function scrapeVideo(page, videoIndex) {
 
   // Wait for video to load (human-like random wait)
   await simulateReading(1500, 3000);
-  await page.waitForSelector(SELECTORS.activeVideo, { timeout: 15000 });
+  try {
+    await page.waitForSelector(SELECTORS.activeVideo, { timeout: CONFIG.ACTIVE_VIDEO_TIMEOUT });
+  } catch (err) {
+    console.log(`  ⏭️  Timeout waiting for feed-active-video, skipping to next`);
+    return null;
+  }
 
   // Get the active video container to scope our selectors
   const activeVideo = page.locator(SELECTORS.activeVideo).first();
@@ -712,6 +646,13 @@ async function scrapeVideo(page, videoIndex) {
     console.log(`  ${pauseResult.paused ? '✅' : '⚠️'} Video ${pauseResult.paused ? 'paused' : 'is still playing'}`);
   } else {
     console.log('  ⚠️  Video element not found; continuing');
+  }
+
+  // Check if comment count button exists before extracting stats
+  const commentButtonExists = (await activeVideo.locator(SELECTORS.commentButton).count()) > 0;
+  if (!commentButtonExists) {
+    console.log('  ⏭️  Skipping: comment button not found');
+    return null;
   }
 
   // Extract basic stats
@@ -789,15 +730,11 @@ async function scrapeVideo(page, videoIndex) {
       const rawShareLink = await getShareLink(page);
 
       if (rawShareLink) {
-        console.log(`  🔗 Raw link: ${rawShareLink}`);
-        const resolvedLink = await resolveShortLink(page, rawShareLink);
-        video.shareLink = resolvedLink.fullLink;
-        video.shortLink = resolvedLink.shortLink;
-        video.videoId = resolvedLink.videoId;
-        console.log(`  🔗 True link: ${video.shareLink}`);
-        if (video.videoId) {
-          console.log(`  🆔 Video ID: ${video.videoId}`);
-        }
+        console.log(`  🔗 Short link: ${rawShareLink}`);
+        video.shortLink = rawShareLink;
+        video.shareLink = video.videoId
+          ? `https://www.douyin.com/video/${video.videoId}`
+          : rawShareLink;
       } else {
         console.log(`  🔗 Share link: Not found`);
         if (video.videoId) {
@@ -900,7 +837,7 @@ async function saveVideoFiles(video, outputDir) {
  * Main scraper function
  */
 async function main() {
-  const videoCount = parseInt(process.argv[2], 10) || 1;
+  const videoCount = Math.min(100, Math.max(1, parseInt(process.argv[2], 10) || 100));
 
   console.log('🎬 Douyin Video Scraper');
   console.log(`📊 Will scrape ${videoCount} video(s) with >= ${CONFIG.MIN_COMMENTS_THRESHOLD} comments`);
@@ -1036,7 +973,7 @@ async function main() {
         console.log(`  ⏳ Waited ${scrollWait}ms for video transition`);
 
         // Wait for new video to become active
-        await page.waitForSelector(SELECTORS.activeVideo, { timeout: 5000 }).catch(() => {});
+        await page.waitForSelector(SELECTORS.activeVideo, { timeout: CONFIG.ACTIVE_VIDEO_TIMEOUT }).catch(() => {});
 
         // Additional random pause to simulate user looking at new video
         await simulateReading(800, 1800);

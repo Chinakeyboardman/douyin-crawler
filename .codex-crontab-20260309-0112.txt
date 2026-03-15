@@ -1,0 +1,2 @@
+0 3 * * * cd /Users/caoxiaopeng/Desktop/githubsync && /opt/homebrew/bin/uv run python clone_github.py >> /Users/caoxiaopeng/Desktop/githubsync/clone.log 2>&1
+0 2 * * * curl -s -X POST 'http://localhost:3000/api/scrape?count=100' >> /Users/caoxiaopeng/Desktop/git/douyin-crawler/scraper-api.log 2>&1

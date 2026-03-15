@@ -21,6 +21,7 @@ start_worker_if_needed() {
   cd "$WORKER_DIR"
   /opt/homebrew/bin/uv run celery -A celery_app worker \
     --loglevel=info \
+    --concurrency=1 \
     --detach \
     --pidfile="$WORKER_PIDFILE" \
     --logfile="$WORKER_LOG"

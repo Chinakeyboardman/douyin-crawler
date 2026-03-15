@@ -145,6 +145,134 @@ def complete_step(video_id, step_name, result, error=None):
         conn.close()
 
 
+def get_videos_without_local_file(limit=500, include_today=True):
+    """
+    Fetch videos that don't have local_file_path set.
+    If include_today: created_at >= yesterday (today + yesterday)
+    Else: created_at::date = yesterday only.
+    """
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            if include_today:
+                cur.execute("""
+                    SELECT video_id, share_link, short_link
+                    FROM douyin_videos
+                    WHERE created_at::date >= CURRENT_DATE - INTERVAL '1 day'
+                      AND (local_file_path IS NULL OR local_file_path = '')
+                      AND (share_link IS NOT NULL AND share_link != ''
+                           OR short_link IS NOT NULL AND short_link != '')
+                    ORDER BY created_at DESC
+                    LIMIT %s
+                """, (limit,))
+            else:
+                cur.execute("""
+                    SELECT video_id, share_link, short_link
+                    FROM douyin_videos
+                    WHERE created_at::date = CURRENT_DATE - INTERVAL '1 day'
+                      AND (local_file_path IS NULL OR local_file_path = '')
+                      AND (share_link IS NOT NULL AND share_link != ''
+                           OR short_link IS NOT NULL AND short_link != '')
+                    ORDER BY created_at ASC
+                    LIMIT %s
+                """, (limit,))
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
+def get_videos_created_yesterday_without_local_file(limit=500):
+    """Fetch videos created yesterday that don't have local_file_path set."""
+    return get_videos_without_local_file(limit=limit, include_today=False)
+
+
+def update_video_local_path(video_id, local_path):
+    """Update douyin_videos with the local file path after download."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE douyin_videos
+                SET local_file_path = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE video_id = %s
+            """, (local_path, video_id))
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def get_video_by_id_with_local_path(video_id):
+    """Fetch a single video by id if it has local_file_path."""
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT video_id, share_link, short_link, local_file_path
+                FROM douyin_videos
+                WHERE video_id = %s
+                  AND local_file_path IS NOT NULL AND local_file_path != ''
+            """, (video_id,))
+            return cur.fetchone()
+    finally:
+        conn.close()
+
+
+def get_videos_with_local_file_without_summary(limit=20):
+    """
+    Fetch videos that have local_file_path and don't have a completed record in douyin_video_summaries.
+    """
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT v.video_id, v.share_link, v.short_link, v.local_file_path
+                FROM douyin_videos v
+                LEFT JOIN douyin_video_summaries s ON v.video_id = s.video_id
+                WHERE v.local_file_path IS NOT NULL AND v.local_file_path != ''
+                  AND (s.id IS NULL OR s.status = 'failed')
+                ORDER BY v.created_at ASC
+                LIMIT %s
+            """, (limit,))
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
+def create_or_update_video_summary(video_id, douyin_url, webgemini_job_id=None, webgemini_result=None, status='pending'):
+    """Create or update douyin_video_summaries record."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO douyin_video_summaries (video_id, douyin_url, webgemini_job_id, webgemini_result, status)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (video_id) DO UPDATE SET
+                    douyin_url = EXCLUDED.douyin_url,
+                    webgemini_job_id = COALESCE(EXCLUDED.webgemini_job_id, douyin_video_summaries.webgemini_job_id),
+                    webgemini_result = COALESCE(EXCLUDED.webgemini_result, douyin_video_summaries.webgemini_result),
+                    status = EXCLUDED.status,
+                    updated_at = CURRENT_TIMESTAMP
+            """, (video_id, douyin_url, webgemini_job_id, webgemini_result, status))
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def update_video_summary_result(video_id, webgemini_result, status='completed'):
+    """Update webgemini_result and status for a video summary."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE douyin_video_summaries
+                SET webgemini_result = %s, status = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE video_id = %s
+            """, (webgemini_result, status, video_id))
+            conn.commit()
+    finally:
+        conn.close()
+
+
 def reset_stale_tasks(hours=24):
     """Reset tasks that have been processing for too long."""
     conn = get_connection()

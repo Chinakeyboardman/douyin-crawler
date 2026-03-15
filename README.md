@@ -39,6 +39,20 @@ A complete system for scraping Douyin (Chinese TikTok) videos and processing the
 - Redis
 - Google Chrome
 
+## 服务管理
+
+可通过 `local-service` 管理 Celery Worker：
+
+```bash
+# 启动 Celery Worker + Beat
+./start-bg.sh
+
+# 停止
+./stop-bg.sh
+```
+
+- **项目说明**：[docs/API.md](docs/API.md)
+
 ## Quick Start
 
 ### 1. Database Setup
@@ -113,7 +127,7 @@ cp .env.example .env
 # Edit .env if needed
 
 # Start Celery worker (keep running in terminal)
-uv run celery -A celery_app worker --loglevel=info
+uv run celery -A celery_app worker --loglevel=info --concurrency=1
 ```
 
 Expected output:
@@ -274,7 +288,7 @@ SAVE_TO_FILE=true node douyin-scraper.js 5  # Save to files too
 
 # === Worker ===
 cd worker
-uv run celery -A celery_app worker --loglevel=info  # Start worker
+uv run celery -A celery_app worker --loglevel=info --concurrency=1  # Start worker
 uv run celery -A celery_app beat --loglevel=info    # Start scheduler (optional)
 uv run python cli.py status                          # Check status
 uv run python cli.py trigger 20                      # Process 20 videos

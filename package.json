@@ -4,7 +4,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "open-browser": "node open-browser.js"
+    "open-browser": "node open-browser.js",
+    "scraper": "node douyin-scraper.js"
   },
   "keywords": [],
   "author": "",

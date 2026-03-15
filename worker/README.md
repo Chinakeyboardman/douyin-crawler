@@ -16,7 +16,7 @@ uv sync
 cp .env.example .env
 
 # 4. Start worker
-uv run celery -A celery_app worker --loglevel=info
+uv run celery -A celery_app worker --loglevel=info --concurrency=1
 
 # 5. Trigger processing (in another terminal)
 uv run python cli.py trigger 20
@@ -127,7 +127,7 @@ def _execute_get_summary(video_id, submit_result):
 
 ```bash
 # Worker logs
-uv run celery -A celery_app worker --loglevel=debug
+uv run celery -A celery_app worker --loglevel=debug --concurrency=1
 
 # Flower web UI (http://localhost:5555)
 uv run --with flower celery -A celery_app flower
@@ -175,5 +175,5 @@ pgrep -f "celery.*worker"
 
 # Restart worker
 pkill -f "celery.*celery_app"
-uv run celery -A celery_app worker --loglevel=info
+uv run celery -A celery_app worker --loglevel=info --concurrency=1
 ```

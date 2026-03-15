@@ -39,7 +39,10 @@ node init-db.js --drop       # Reset all data
 ```bash
 npm install                  # Install dependencies
 
-# Run scraper (launches system Chrome automatically via patchright)
+# 推荐：使用启动脚本（含数据库检查、无超时、PGUSER 自动设置）
+./scripts/run-scraper.sh 10  # 抓取 10 个视频，无超时
+
+# 直接运行
 node douyin-scraper.js 10    # Scrape 10 videos
 SAVE_TO_FILE=true node douyin-scraper.js 5  # Also save JSON/MD files
 
@@ -52,8 +55,9 @@ BROWSER_USER_DATA_DIR=./browser-profile node douyin-scraper.js 5
 cd worker
 uv sync                      # Install dependencies
 
-# Start worker (requires Redis running)
-uv run celery -A celery_app worker --loglevel=info
+# Start worker + beat (requires Redis running)
+./scripts/start-celery.sh    # Worker + Beat，含 scrape_douyin_daily（每天 2:00）
+./scripts/stop-celery.sh     # 停止
 
 # CLI commands
 uv run python cli.py status              # Check pending videos and task stats

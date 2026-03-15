@@ -1,0 +1,2 @@
+# Crontab example (douyin scrape 已由 Celery Beat 接管，无需 crontab)
+# 若曾安装过 douyin 定时任务，请执行 crontab -e 删除对应行。

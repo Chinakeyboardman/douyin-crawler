@@ -24,9 +24,17 @@ app.conf.beat_schedule = {
         'schedule': crontab(hour=SCHEDULE_HOUR, minute=SCHEDULE_MINUTE),
         'args': (BATCH_SIZE,),
     },
+    'download-yesterday-videos-daily': {
+        'task': 'tasks.download_yesterday_videos',
+        'schedule': crontab(hour=5, minute=0),  # 每天凌晨 5 点
+    },
     'reset-stale-tasks': {
         'task': 'tasks.reset_stale_tasks',
         'schedule': crontab(hour='*/6'),  # Every 6 hours
+    },
+    'scrape-douyin-daily': {
+        'task': 'tasks.scrape_douyin_daily',
+        'schedule': crontab(hour=2, minute=0),  # 每天凌晨 2 点（原 crontab）
     },
 }
 
