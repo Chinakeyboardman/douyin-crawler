@@ -905,7 +905,9 @@ async function scrapeVideo(page, videoIndex, options = {}) {
         const resolvedLink = await resolveShortLink(page, rawShareLink);
         video.shareLink = resolvedLink.fullLink;
         video.shortLink = resolvedLink.shortLink;
-        video.videoId = resolvedLink.videoId;
+        if (resolvedLink.videoId) {
+          video.videoId = resolvedLink.videoId;
+        }
         console.log(`  🔗 True link: ${video.shareLink}`);
         if (video.videoId) {
           console.log(`  🆔 Video ID: ${video.videoId}`);
@@ -924,13 +926,13 @@ async function scrapeVideo(page, videoIndex, options = {}) {
     }
   } catch (err) {
     console.log(`  ⚠️  Could not get share link: ${err.message}`);
-    if (targetUrl) {
-      video.shareLink = targetUrl;
-      video.shortLink = targetUrl;
-      console.log(`  🔗 Fallback link after share failure: ${video.shareLink}`);
-    } else if (video.videoId) {
+    if (video.videoId) {
       video.shareLink = `https://www.douyin.com/video/${video.videoId}`;
       video.shortLink = video.shareLink;
+      console.log(`  🔗 Fallback link after share failure: ${video.shareLink}`);
+    } else if (targetUrl) {
+      video.shareLink = targetUrl;
+      video.shortLink = targetUrl;
       console.log(`  🔗 Fallback link after share failure: ${video.shareLink}`);
     }
   }
@@ -1040,6 +1042,10 @@ async function main() {
     if (!Number.isNaN(maybeCount) && maybeCount > 0) {
       videoCount = maybeCount;
     }
+  }
+
+  if (targetUrl) {
+    videoCount = 1;
   }
 
   console.log('🎬 Douyin Video Scraper');
